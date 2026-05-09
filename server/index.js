@@ -24,6 +24,6 @@ app.get('/api/styles', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  沃垠内容写作神器 已启动`);
+  console.log(`\n  内容写作台 已启动`);
   console.log(`  访问地址: http://localhost:${PORT}\n`);
 });

@@ -97,10 +97,16 @@
                   <span id="article-style-tag" class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">未选择</span>
                 </div>
               </div>
-              <button onclick="App.copyText('article')" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
-                <i class="far fa-copy"></i>
-                <span>复制正文</span>
-              </button>
+              <div class="flex items-center gap-2">
+                <button onclick="App.copyText('article')" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                  <i class="far fa-copy"></i>
+                  <span>复制正文</span>
+                </button>
+                <button onclick="App.downloadMarkdown()" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                  <i class="fas fa-file-arrow-down"></i>
+                  <span>下载 Markdown</span>
+                </button>
+              </div>
             </div>
 
             <div id="article-content" class="article-output px-5 sm:px-6 py-6 min-h-[360px]">

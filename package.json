@@ -1,7 +1,7 @@
 {
   "name": "writing-tool",
   "version": "1.0.0",
-  "description": "沃垠内容写作神器 - AI Agent驱动的一站式内容创作工具",
+  "description": "内容写作台 - AI 驱动的一站式内容创作工具",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

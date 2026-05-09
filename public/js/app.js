@@ -578,6 +578,31 @@ const App = {
     }
   },
 
+  downloadMarkdown() {
+    if (!this.currentArticle) {
+      this.showToast('还没有可下载的正文', 'error');
+      return;
+    }
+
+    try {
+      const blob = new Blob([this.currentArticle], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const topic = document.getElementById('topic-input').value.trim().slice(0, 20) || 'article';
+      const safeName = topic.replace(/[\\/:*?"<>|]/g, '_');
+      a.href = url;
+      a.download = `${safeName}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.showToast('Markdown 已开始下载');
+    } catch (err) {
+      console.error('Markdown download error:', err);
+      this.showToast('Markdown 下载失败', 'error');
+    }
+  },
+
   // ---- Copy & Toast ----
   copyText(type) {
     let text = '';
