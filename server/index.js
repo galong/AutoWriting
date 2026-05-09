@@ -16,6 +16,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/api', require('./routes/article'));
 app.use('/api', require('./routes/titles'));
 app.use('/api', require('./routes/cover'));
+app.use('/api', require('./routes/linkedin'));
 
 // Get available styles
 app.get('/api/styles', (req, res) => {

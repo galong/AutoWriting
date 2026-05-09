@@ -1,5 +1,5 @@
 /**
- * 沃垠内容写作神器 - Frontend Application
+ * 内容写作台 - Frontend Application
  */
 const App = {
   // State
@@ -7,6 +7,8 @@ const App = {
   titles: [],
   coverPrompts: [],
   coverImageData: null,
+  linkedInFormatted: '',
+  currentView: 'writing',
   isGenerating: false,
 
   // ---- Init ----
@@ -14,6 +16,7 @@ const App = {
     this.loadStyles();
     this.loadSettings();
     this.bindEvents();
+    this.switchView('writing');
 
     // Show settings if text model not configured
     if (!this.getSettings().apiUrl) {
@@ -28,6 +31,26 @@ const App = {
     topicInput.addEventListener('input', () => {
       btnGenerate.disabled = !topicInput.value.trim() || this.isGenerating;
     });
+
+    const linkedinTitleInput = document.getElementById('linkedin-title-input');
+    const linkedinBodyInput = document.getElementById('linkedin-body-input');
+    const formatLinkedin = () => {
+      const title = linkedinTitleInput.value.trim();
+      const body = linkedinBodyInput.value.trim();
+      document.getElementById('btn-format-linkedin').disabled = !title && !body;
+    };
+
+    linkedinTitleInput.addEventListener('input', formatLinkedin);
+    linkedinBodyInput.addEventListener('input', formatLinkedin);
+    formatLinkedin();
+  },
+
+  switchView(view) {
+    this.currentView = view;
+    document.getElementById('writing-view').classList.toggle('hidden', view !== 'writing');
+    document.getElementById('linkedin-view').classList.toggle('hidden', view !== 'linkedin');
+    document.getElementById('tab-writing').classList.toggle('is-active', view === 'writing');
+    document.getElementById('tab-linkedin').classList.toggle('is-active', view === 'linkedin');
   },
 
   // ---- Settings ----
@@ -91,6 +114,116 @@ const App = {
       ).join('');
     } catch (err) {
       console.error('Load styles failed:', err);
+    }
+  },
+
+  // ---- LinkedIn Formatter ----
+  formatLinkedInPost() {
+    const title = document.getElementById('linkedin-title-input').value.trim();
+    const body = document.getElementById('linkedin-body-input').value.trim();
+    const preferredPattern = document.getElementById('linkedin-pattern-select').value;
+    const settings = this.getSettings();
+
+    if (!title && !body) {
+      this.showToast('请先输入标题或正文', 'error');
+      return;
+    }
+
+    if (!settings.apiUrl || !settings.apiKey || !settings.modelName) {
+      this.openSettings();
+      this.showToast('请先配置文本模型', 'error');
+      return;
+    }
+
+    this.requestLinkedInFormat({
+      title,
+      article: this.normalizeArticleText(body),
+      pattern: preferredPattern,
+      settings,
+    });
+  },
+
+  renderLinkedInOutput(pattern) {
+    const output = document.getElementById('linkedin-output');
+    const charCount = this.linkedInFormatted.length;
+    output.textContent = this.linkedInFormatted;
+    document.getElementById('linkedin-pattern-tag').textContent = `模式：${this.getLinkedInPatternName(pattern)}`;
+    const countTag = document.getElementById('linkedin-char-count');
+    countTag.textContent = `字数：${charCount}`;
+    countTag.className = `inline-flex items-center px-2 py-0.5 rounded-full ${charCount > 3000 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`;
+    if (charCount > 3000) {
+      this.showToast('当前文案超过 LinkedIn 3000 字限制，请适当删减', 'error');
+    }
+  },
+
+  extractSentences(text) {
+    return text
+      .split(/(?<=[。！？!?])/)
+      .map(part => part.trim())
+      .filter(Boolean);
+  },
+
+  normalizeArticleText(text) {
+    return this.stripMarkdown(text)
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  },
+
+  stripMarkdown(text) {
+    return text
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/!\[.*?\]\(.*?\)/g, '')
+      .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+      .replace(/^\s*[-*+]\s+/gm, '')
+      .replace(/^\s*\d+[.)、]\s+/gm, '')
+      .trim();
+  },
+
+  getLinkedInPatternName(pattern) {
+    return {
+      auto: '自动判断',
+      general: 'Hook → 内容 → CTA',
+      listicle: '编号清单',
+      story: '故事 → 观点',
+      resource: '资源分享',
+    }[pattern] || '自动判断';
+  },
+
+  async requestLinkedInFormat({ title, article, pattern, settings }) {
+    const output = document.getElementById('linkedin-output');
+    output.innerHTML = '<div class="animate-pulse-custom text-slate-400 text-sm">正在基于原文语义生成 LinkedIn 文案...</div>';
+    this.setLoading('btn-format-linkedin', true, '生成 LinkedIn 文案');
+
+    try {
+      const res = await fetch('/api/linkedin/format', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          article,
+          pattern,
+          apiUrl: settings.apiUrl,
+          apiKey: settings.apiKey,
+          modelName: settings.modelName,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '生成失败');
+
+      this.linkedInFormatted = data.content || '';
+      this.renderLinkedInOutput(pattern === 'auto' ? 'auto' : pattern);
+      this.showToast('LinkedIn 文案已生成');
+    } catch (err) {
+      console.error('LinkedIn format error:', err);
+      output.innerHTML = `<div class="text-red-500 text-sm"><i class="fas fa-exclamation-circle mr-1"></i>${this.escapeHtml(err.message)}</div>`;
+      this.showToast(err.message, 'error');
+    } finally {
+      this.setLoading('btn-format-linkedin', false, '生成 LinkedIn 文案');
     }
   },
 
@@ -450,6 +583,8 @@ const App = {
     let text = '';
     if (type === 'article') {
       text = this.currentArticle;
+    } else if (type === 'linkedin') {
+      text = this.linkedInFormatted;
     } else if (type.startsWith('title-')) {
       const idx = parseInt(type.split('-')[1]);
       text = this.titles[idx]?.title || '';
