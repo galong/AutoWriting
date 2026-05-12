@@ -36,6 +36,19 @@ function buildEndpoint(apiUrl, defaultPath) {
   return base;
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableStatus(status) {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+function shouldFallbackToStream(status, errorText) {
+  return status === 400 &&
+    /not supported when using Codex with a ChatGPT account/i.test(errorText || '');
+}
+
 async function createChatCompletion({ apiUrl, apiKey, modelName, messages, stream = false }) {
   const url = buildEndpoint(apiUrl, '/chat/completions');
 
@@ -63,21 +76,46 @@ async function createChatCompletion({ apiUrl, apiKey, modelName, messages, strea
 async function createChatCompletionJSON({ apiUrl, apiKey, modelName, messages }) {
   const url = buildEndpoint(apiUrl, '/chat/completions');
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: modelName,
-      messages,
-      stream: false,
-    }),
-  });
+  let response;
+  let errorText = '';
+  const maxAttempts = 3;
+  let fallbackToStream = false;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages,
+        stream: false,
+      }),
+    });
+
+    if (response.ok) break;
+
+    errorText = await response.text();
+    if (shouldFallbackToStream(response.status, errorText)) {
+      fallbackToStream = true;
+      break;
+    }
+
+    if (!isRetryableStatus(response.status) || attempt === maxAttempts) break;
+
+    await sleep(500 * attempt);
+  }
+
+  if (fallbackToStream) {
+    const streamResponse = await createChatCompletion({
+      apiUrl, apiKey, modelName, messages, stream: true,
+    });
+    return readStreamContent(streamResponse);
+  }
 
   if (!response.ok) {
-    const errorText = await response.text();
     throw new Error(`AI API Error (${response.status}) [${url}]: ${errorText}`);
   }
 
@@ -85,9 +123,49 @@ async function createChatCompletionJSON({ apiUrl, apiKey, modelName, messages })
   return data.choices?.[0]?.message?.content || '';
 }
 
-async function createImage({ apiUrl, apiKey, modelName, prompt, size = '3008x1280' }) {
+async function readStreamContent(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+
+      const data = trimmed.slice(6);
+      if (data === '[DONE]') continue;
+
+      try {
+        const parsed = JSON.parse(data);
+        content += parsed.choices?.[0]?.delta?.content || '';
+      } catch (_) {}
+    }
+  }
+
+  return content;
+}
+
+function getDefaultImageSize(modelName) {
+  if (/^dall-e-2$/i.test(modelName)) return '1024x1024';
+  if (/^dall-e-3$/i.test(modelName)) return '1792x1024';
+  if (/^gpt-image/i.test(modelName)) return '1024x1024';
+  return '1536x1024';
+}
+
+async function createImage({ apiUrl, apiKey, modelName, prompt, size }) {
   const url = buildEndpoint(apiUrl, '/images/generations');
   const isDashScope = /dashscope/i.test(url);
+  const isGptImage = /^gpt-image/i.test(modelName);
+  const imageSize = size || getDefaultImageSize(modelName);
 
   // Build request body based on API provider
   let requestBody;
@@ -101,7 +179,7 @@ async function createImage({ apiUrl, apiKey, modelName, prompt, size = '3008x128
         ]
       },
       parameters: {
-        size: size.replace('x', '*')
+        size: imageSize.replace('x', '*')
       }
     };
   } else {
@@ -110,8 +188,13 @@ async function createImage({ apiUrl, apiKey, modelName, prompt, size = '3008x128
       model: modelName,
       prompt,
       n: 1,
-      size,
+      size: imageSize,
     };
+
+    if (isGptImage) {
+      requestBody.quality = 'low';
+      requestBody.output_format = 'png';
+    }
   }
 
   const response = await fetch(url, {
@@ -125,6 +208,14 @@ async function createImage({ apiUrl, apiKey, modelName, prompt, size = '3008x128
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (response.status === 504) {
+      console.error('Image API gateway timeout:', {
+        url,
+        model: modelName,
+        size: imageSize,
+      });
+      throw new Error(`图片生成接口网关超时（504）。请求已发送到 ${url}，模型 ${modelName}，尺寸 ${imageSize}。请确认该中转服务支持 OpenAI 兼容的图片生成接口 /v1/images/generations，且图片模型支持同步返回结果。`);
+    }
     throw new Error(`Image API Error (${response.status}) [${url}]: ${errorText}`);
   }
 

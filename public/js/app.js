@@ -462,12 +462,12 @@ const App = {
             <div class="text-xs text-slate-400 mb-1">Prompt ${i + 1}</div>
             <p class="text-sm text-slate-700 leading-relaxed break-all">${this.escapeHtml(prompt)}</p>
           </div>
-          <button onclick="App.copyText('prompt-${i}')" class="flex-shrink-0 text-slate-400 hover:text-primary-600 transition-colors mt-4" title="复制 Prompt">
+          <button onclick="App.copyText('prompt-${i}')" class="flex-shrink-0 text-slate-400 hover:text-brand-600 transition-colors mt-4" title="复制 Prompt">
             <i class="far fa-copy text-sm"></i>
           </button>
         </div>
         <div class="mt-3 flex justify-end">
-          <button onclick="App.generateCoverImage(${i})" id="btn-cover-gen-${i}" class="px-4 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-all flex items-center gap-1.5">
+          <button onclick="App.generateCoverImage(${i})" id="btn-cover-gen-${i}" class="px-4 py-1.5 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-all flex items-center gap-1.5">
             <i class="fas fa-wand-magic-sparkles text-xs"></i>
             <span>生成封面</span>
           </button>

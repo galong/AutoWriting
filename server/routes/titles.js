@@ -35,7 +35,32 @@ router.post('/titles', async (req, res) => {
 
     const raw = await ai.createChatCompletionJSON({ apiUrl, apiKey, modelName, messages });
 
-    const titles = ai.parseJSON(raw);
+    let titles;
+    try {
+      titles = ai.parseJSON(raw);
+    } catch (parseErr) {
+      const repairMessages = [
+        {
+          role: 'system',
+          content: `你是 JSON 修复器。请把用户提供的文本修复为严格合法的 JSON 数组。
+
+要求：
+1. 只输出 JSON，不要解释。
+2. 输出必须是数组。
+3. 数组元素必须是对象，且只包含 title 和 summary 两个字符串字段。
+4. 尽量保留原文标题和摘要，不要重新创作。
+5. 如果原文不足 5 组，只修复已有内容，不要编造。`,
+        },
+        { role: 'user', content: raw },
+      ];
+      const repaired = await ai.createChatCompletionJSON({ apiUrl, apiKey, modelName, messages: repairMessages });
+      try {
+        titles = ai.parseJSON(repaired);
+      } catch (_) {
+        throw parseErr;
+      }
+    }
+
     if (!Array.isArray(titles)) {
       return res.status(500).json({ error: 'AI 返回格式异常，期望数组', raw: raw.substring(0, 200) });
     }

@@ -19,10 +19,10 @@ router.post('/cover/prompts', async (req, res) => {
 2. 生成 3 个不同风格的封面图文生图 Prompt
 
 Prompt 要求：
-- 统一宽高比 2.35:1（宽幅横图）
+- 宽幅横图构图，主体居中，左右保留安全边距，适合后续裁切为公众号封面比例
 - 风格各不相同，例如：科技感/赛博朋克、极简主义/扁平化、抽象艺术/概念化
 - 每个 Prompt 用英文撰写，包含详细的视觉描述、风格、色调、构图等
-- Prompt 中明确标注 aspect ratio 2.35:1
+- Prompt 中明确说明 wide landscape cover composition，但不要要求非标准 API 尺寸
 
 请严格按以下 JSON 格式返回，不要返回任何其他内容：
 {
@@ -62,8 +62,7 @@ router.post('/cover/generate', async (req, res) => {
       return res.status(400).json({ error: '缺少必要参数' });
     }
 
-    // createImage already returns { url, b64_json, revised_prompt }
-    // and uses default size 3008x1280 (meets Volcengine 3.69M pixel minimum)
+    // createImage returns { url, b64_json, revised_prompt } using an OpenAI-compatible size.
     const result = await ai.createImage({ apiUrl, apiKey, modelName, prompt });
 
     if (!result.url && !result.b64_json) {
